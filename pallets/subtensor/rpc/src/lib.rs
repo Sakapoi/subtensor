@@ -5,6 +5,7 @@ use jsonrpsee::{
     proc_macros::rpc,
     types::{error::ErrorObject, ErrorObjectOwned},
 };
+use pallet_subtensor::{Config, Pallet};
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
 use std::sync::Arc;
@@ -224,3 +225,25 @@ where
         })
     }
 }
+
+#[rpc(client, server)]
+pub trait SubtensorCustomApiExt<T: Config, BlockHash> : SubtensorCustomApi<BlockHash>{
+    #[method(name = "subnetInfo_SubtensorEpoch")]
+    fn subtensor_epoch(&self, netuid: u16, incentive: bool) -> RpcResult<Vec<(T, u64, u64)>>;
+}
+
+impl<T: Config<AccountId = T>, C, Block> SubtensorCustomApiExtServer<T, <Block as BlockT>::Hash> for SubtensorCustom<C, Block>
+where
+    Block: BlockT,
+    C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
+    C::Api: DelegateInfoRuntimeApi<Block>,
+    C::Api: NeuronInfoRuntimeApi<Block>,
+    C::Api: SubnetInfoRuntimeApi<Block>,
+    C::Api: SubnetRegistrationRuntimeApi<Block>,
+{
+    fn subtensor_epoch(&self, netuid: u16, incentive: bool) -> RpcResult<Vec<(T, u64, u64)>> {
+        let a = Pallet::<T>::epoch(netuid, Some(incentive));
+        Ok(a)
+    }
+}
+

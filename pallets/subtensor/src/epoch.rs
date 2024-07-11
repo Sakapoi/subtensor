@@ -3,6 +3,7 @@ use crate::math::*;
 use frame_support::IterableStorageDoubleMap;
 use sp_std::vec;
 use substrate_fixed::types::{I32F32, I64F64, I96F32};
+use frame_benchmarking::account;
 
 impl<T: Config> Pallet<T> {
     /// Calculates reward consensus and returns the emissions for uids/hotkeys in a given `netuid`.
@@ -352,7 +353,9 @@ impl<T: Config> Pallet<T> {
     ///     - Print debugging outputs.
     ///
     #[allow(clippy::indexing_slicing)]
-    pub fn epoch(netuid: u16, rao_emission: u64) -> Vec<(T::AccountId, u64, u64)> {
+    pub fn epoch(netuid: u16, incentive: Option<bool>) -> Vec<(T::AccountId, u64, u64)> {
+        let rao_emission: u64 = Self::get_rao_recycled(netuid);
+        log::trace!("rao_emission: {:?}", rao_emission);
         // Get subnetwork size.
         let n: u16 = Self::get_subnetwork_n(netuid);
         log::trace!("n: {:?}", n);
@@ -502,8 +505,17 @@ impl<T: Config> Pallet<T> {
         log::trace!("T: {:?}", &trust);
 
         inplace_normalize(&mut ranks); // range: I32F32(0, 1)
-        let incentive: Vec<I32F32> = ranks.clone();
-        log::trace!("I (=R): {:?}", &incentive);
+
+        let incentive_storage_value: Vec<I32F32> = ranks.clone();
+        log::trace!("I (=R): {:?}", &incentive_storage_value);
+
+        if incentive.unwrap_or(false) {
+            let dummy_account_id: T::AccountId = account("", 0, 0);
+            return incentive_storage_value
+                .into_iter()
+                .map(|score| (dummy_account_id.clone(), 0, I64F64::to_num(score.into())))
+                .collect();
+        }
 
         // =========================
         // == Bonds and Dividends ==
@@ -546,7 +558,7 @@ impl<T: Config> Pallet<T> {
 
         // Compute dividends: d_i = SUM(j) b_ij * inc_j.
         // range: I32F32(0, 1)
-        let mut dividends: Vec<I32F32> = matmul_transpose_sparse(&ema_bonds, &incentive);
+        let mut dividends: Vec<I32F32> = matmul_transpose_sparse(&ema_bonds, &incentive_storage_value);
         inplace_normalize(&mut dividends);
         log::trace!("D: {:?}", &dividends);
 
@@ -555,14 +567,14 @@ impl<T: Config> Pallet<T> {
         // =================================
 
         // Compute normalized emission scores. range: I32F32(0, 1)
-        let combined_emission: Vec<I32F32> = incentive
+        let combined_emission: Vec<I32F32> = incentive_storage_value
             .iter()
             .zip(dividends.clone())
             .map(|(ii, di)| ii + di)
             .collect();
         let emission_sum: I32F32 = combined_emission.iter().sum();
 
-        let mut normalized_server_emission: Vec<I32F32> = incentive.clone(); // Servers get incentive.
+        let mut normalized_server_emission: Vec<I32F32> = incentive_storage_value.clone(); // Servers get incentive.
         let mut normalized_validator_emission: Vec<I32F32> = dividends.clone(); // Validators get dividends.
         let mut normalized_combined_emission: Vec<I32F32> = combined_emission.clone();
         // Normalize on the sum of incentive + dividends.
@@ -641,7 +653,7 @@ impl<T: Config> Pallet<T> {
             .iter()
             .map(|xi| fixed_proportion_to_u16(*xi))
             .collect::<Vec<u16>>();
-        let cloned_incentive: Vec<u16> = incentive
+        let cloned_incentive: Vec<u16> = incentive_storage_value
             .iter()
             .map(|xi| fixed_proportion_to_u16(*xi))
             .collect::<Vec<u16>>();
