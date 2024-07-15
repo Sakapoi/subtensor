@@ -1585,7 +1585,7 @@ impl_runtime_apis! {
         fn get_subtensor_epoch(netuid: u16, incentive: Option<bool>) -> Vec<u8> {
             let result = SubtensorModule::epoch(netuid, incentive);
             
-            result.unwrap_or_default().encode()
+            result.encode()
         }
     }
 }

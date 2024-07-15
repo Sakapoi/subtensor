@@ -240,7 +240,7 @@ where
         at: Option<<Block as BlockT>::Hash>,
     ) -> RpcResult<Vec<u8>> {
         let api = self.client.runtime_api();
-        let at = at.unwrap_or_else(|| self.client.info().best_hash);
+        let at = at.unwrap_or(self.client.info().best_hash);
 
         api.get_subtensor_epoch(at, netuid, incentive)
             .map_err(|e| Error::RuntimeError(format!("Unable to get neurons info: {:?}", e)).into())
